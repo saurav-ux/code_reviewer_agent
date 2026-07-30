@@ -31,13 +31,16 @@ def verify_signature(secret: str, body: bytes, signature_header: str | None) -> 
 
 @router.post("/webhook")
 async def github_webhook(
-    request: Request, x_hub_signature_256: str | None = Header(None)
+    request: Request,
+    x_hub_signature_256: str | None = Header(None),
+    x_github_event: str | None = Header(None),
 ) -> Dict[str, Any]:
     body = await request.body()
 
-    secret = os.getenv("GITHUB_WEBHOOK_SECRET") or settings.__dict__.get(
-        "GITHUB_WEBHOOK_SECRET"
-    )
+    secret = settings.github_webhook_secret
+    if secret:
+        secret = secret.strip()
+
     if not secret:
         raise HTTPException(
             status_code=HTTP_400_BAD_REQUEST, detail="Webhook secret not configured"
@@ -49,6 +52,9 @@ async def github_webhook(
         )
 
     payload = await request.json()
+
+    if x_github_event == "ping":
+        return {"status": "pong"}
 
     # Basic extraction
     action = payload.get("action")
@@ -74,7 +80,7 @@ async def github_webhook(
         )
 
     # Initialize GitHub client
-    gh = GitHubClient(token=settings.github_token)
+    gh = GitHubClient(token=settings.github_token, base_url=settings.github_api)
 
     print()
     print("Files Changed")
