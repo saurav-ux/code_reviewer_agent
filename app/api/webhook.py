@@ -115,4 +115,4 @@ async def github_webhook(
     for s in structured:
         print(s)
 
-    return {"status": "ok"}
+    return {"status": "ok", "diffs": structured}
