@@ -53,10 +53,19 @@ async def github_webhook(
 
     payload = await request.json()
 
+    print("GitHub event:", x_github_event)
+
     if x_github_event == "ping":
         return {"status": "pong"}
 
-    # Basic extraction
+    if x_github_event != "pull_request":
+        return {
+            "status": "ignored",
+            "event": x_github_event,
+            "action": payload.get("action"),
+        }
+
+    # Basic extraction for pull request events
     action = payload.get("action")
     pr = payload.get("pull_request") or {}
     pr_number = pr.get("number")
