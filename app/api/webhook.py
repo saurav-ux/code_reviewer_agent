@@ -37,6 +37,10 @@ async def github_webhook(
 ) -> Dict[str, Any]:
     body = await request.body()
 
+    print("Incoming GitHub webhook request")
+    print("X-GitHub-Event:", x_github_event)
+    print("Has signature:", x_hub_signature_256 is not None)
+
     secret = settings.github_webhook_secret
     if secret:
         secret = secret.strip()
