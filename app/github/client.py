@@ -7,9 +7,18 @@ import requests
 
 class GitHubClient:
     def __init__(self, token: str | None = None, base_url: str | None = None) -> None:
-        self.token = token or os.getenv("GITHUB_TOKEN")
-        self.base_url = base_url or os.getenv("GITHUB_API", "https://api.github.com")
+        token_value = token or os.getenv("GITHUB_TOKEN")
+        self.token = token_value.strip() if isinstance(token_value, str) else None
+        self.base_url = (
+            base_url or os.getenv("GITHUB_API", "https://api.github.com")
+        ).strip()
         self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "code-review-agent",
+            }
+        )
         if self.token:
             self.session.headers.update({"Authorization": f"token {self.token}"})
 
