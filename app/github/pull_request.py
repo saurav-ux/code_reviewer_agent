@@ -1,4 +1,4 @@
-"""Pull request related helpers and orchestrations."""
+"""Pull request related helpers and orchest."""
 
 from typing import Any
 
