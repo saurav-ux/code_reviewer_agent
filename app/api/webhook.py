@@ -2,8 +2,9 @@
 
 import hmac
 import hashlib
-import os
 from typing import Dict, Any
+
+import requests
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from starlette.status import HTTP_400_BAD_REQUEST, HTTP_401_UNAUTHORIZED
@@ -78,10 +79,16 @@ async def github_webhook(
     owner = repository.get("owner", {}).get("login")
     repo = repository.get("name")
 
+    if not owner or not repo:
+        base_repo = pr.get("base", {}).get("repo") or {}
+        owner = owner or base_repo.get("owner", {}).get("login")
+        repo = repo or base_repo.get("name")
+
     print("Webhook received")
     print()
-    print("Repository:")
-    print(repo)
+    print("Action:", action)
+    print("Owner:", owner)
+    print("Repo:", repo)
     print()
     print("PR:")
     print(f"#{pr_number}")
@@ -97,15 +104,43 @@ async def github_webhook(
 
     print()
     print("Files Changed by me:")
-    files = gh.get_changed_files(owner, repo, pr_number)
+    try:
+        files = gh.get_changed_files(owner, repo, pr_number)
+    except requests.HTTPError as exc:
+        response = exc.response
+        status_code = response.status_code if response is not None else None
+        body_text = None
+        if response is not None:
+            body_text = response.text.strip()
+            if len(body_text) > 500:
+                body_text = body_text[:500] + "..."
+        print("GitHub API error:", status_code, exc)
+        if body_text:
+            print("GitHub response:", body_text)
+
+        detail = f"GitHub API error fetching changed files: {exc}"
+        if status_code == 404:
+            detail = (
+                "Resource not found or inaccessible. "
+                "Verify the repository owner/name, PR number, and token permissions."
+            )
+        elif status_code == 403:
+            detail = (
+                "Access forbidden. Ensure the GitHub token has the required repo scopes "
+                "and can access this repository."
+            )
+        elif status_code == 401:
+            detail = "Authentication failed. Verify the GitHub token is valid."
+
+        raise HTTPException(status_code=status_code or 502, detail=detail)
+
     for f in files:
         print(f.get("filename"))
 
     print()
     print("Fetching diff...")
-    diffs = gh.get_diff(owner, repo, pr_number)
     structured = []
-    for item in diffs:
+    for item in files:
         parsed = parse_diff(item.get("patch", ""))
         parsed["file"] = item.get("filename")
         structured.append(parsed)
