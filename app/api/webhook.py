@@ -47,6 +47,10 @@ async def github_webhook(
         x_github_event,
         x_hub_signature_256 is not None,
     )
+    print(
+        "Incoming GitHub webhook request — event=%s has_signature=%s"
+        % (x_github_event, x_hub_signature_256 is not None)
+    )
 
     secret = settings.github_webhook_secret
     if secret:
