@@ -3,6 +3,8 @@
 import hmac
 import hashlib
 from typing import Dict, Any
+import json
+import logging
 
 import requests
 
@@ -12,6 +14,8 @@ from starlette.status import HTTP_400_BAD_REQUEST, HTTP_401_UNAUTHORIZED
 from app.core.config import settings
 from app.github.client import GitHubClient
 from app.services.diff_parser import parse_diff
+
+logger = logging.getLogger("code_review_agent.webhook")
 
 router = APIRouter()
 
@@ -38,9 +42,11 @@ async def github_webhook(
 ) -> Dict[str, Any]:
     body = await request.body()
 
-    print("Incoming GitHub webhook request")
-    print("X-GitHub-Event:", x_github_event)
-    print("Has signature:", x_hub_signature_256 is not None)
+    logger.info(
+        "Incoming GitHub webhook request — event=%s has_signature=%s",
+        x_github_event,
+        x_hub_signature_256 is not None,
+    )
 
     secret = settings.github_webhook_secret
     if secret:
@@ -58,7 +64,7 @@ async def github_webhook(
 
     payload = await request.json()
 
-    print("GitHub event:", x_github_event)
+    logger.info("GitHub event: %s", x_github_event)
 
     if x_github_event == "ping":
         return {"status": "pong"}
@@ -84,14 +90,13 @@ async def github_webhook(
         owner = owner or base_repo.get("owner", {}).get("login")
         repo = repo or base_repo.get("name")
 
-    print("Webhook received")
-    print()
-    print("Action:", action)
-    print("Owner:", owner)
-    print("Repo:", repo)
-    print()
-    print("PR:")
-    print(f"#{pr_number}")
+    logger.info(
+        "Webhook received — action=%s owner=%s repo=%s pr=%s",
+        action,
+        owner,
+        repo,
+        pr_number,
+    )
 
     if not all([owner, repo, pr_number]):
         raise HTTPException(
@@ -102,8 +107,7 @@ async def github_webhook(
     # Initialize GitHub client
     gh = GitHubClient(token=settings.github_token, base_url=settings.github_api)
 
-    print()
-    print("Files Changed by me:")
+    logger.info("Fetching changed files for %s/%s PR #%s", owner, repo, pr_number)
     try:
         files = gh.get_changed_files(owner, repo, pr_number)
     except requests.HTTPError as exc:
@@ -114,11 +118,10 @@ async def github_webhook(
             body_text = response.text.strip()
             if len(body_text) > 500:
                 body_text = body_text[:500] + "..."
-        print("GitHub API error:", status_code, exc)
+        logger.error("GitHub API error: %s %s", status_code, exc)
         if body_text:
-            print("GitHub response:", body_text)
+            logger.debug("GitHub response: %s", body_text)
 
-        detail = f"GitHub API error fetching changed files: {exc}"
         if status_code == 404:
             detail = (
                 "Resource not found or inaccessible. "
@@ -131,27 +134,22 @@ async def github_webhook(
             )
         elif status_code == 401:
             detail = "Authentication failed. Verify the GitHub token is valid."
+        else:
+            detail = f"GitHub API error fetching changed files: {exc}"
 
         raise HTTPException(status_code=status_code or 502, detail=detail)
 
     for f in files:
-        print(f.get("filename"))
+        logger.info("  %s", f.get("filename"))
 
-    print()
-    print("Fetching diff...")
+    logger.info("Parsing diffs from file entries")
     structured = []
     for item in files:
         parsed = parse_diff(item.get("patch", ""))
         parsed["file"] = item.get("filename")
         structured.append(parsed)
 
-    print()
-    print("Done.")
-
-    # Log output summary
-    print("----------------")
-    print("Diffs parsed:")
-    for s in structured:
-        print(s)
+    logger.info("Done. Parsed %d diffs.", len(structured))
+    logger.debug("Parsed diffs:\n%s", json.dumps(structured, indent=2))
 
     return {"status": "ok", "diffs": structured}
