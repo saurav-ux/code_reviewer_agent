@@ -7,7 +7,7 @@ def parse_diff(diff_text: str) -> Dict[str, str]:
     """Very small parser: extract added lines from a GitHub patch.
 
     Returns a dict with a `diff` key containing the joined added lines
-    with the leading '+' removed.
+    with the leading '+' removed testing PR response.
     """
     lines = []
     for raw in (diff_text or "").splitlines():
