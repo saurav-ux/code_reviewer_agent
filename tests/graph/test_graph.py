@@ -84,8 +84,7 @@ def test_graph_preserves_pr_metadata(review_graph):
 
 
 @pytest.mark.skipif(
-    condition=True,
-    reason="Requires GROQ_API_KEY configured; run with --groq to enable"
+    condition=True, reason="Requires GROQ_API_KEY configured; run with --groq to enable"
 )
 def test_graph_finds_security_issues(review_graph):
     """
@@ -111,7 +110,7 @@ def test_graph_finds_security_issues(review_graph):
         "review_findings": [],
         "final_summary": "",
     }
-    
+    sqlInjection = 'query = f"SELECT * FROM users WHERE id = {user_id}"'
     result = review_graph.invoke(initial_state)
     findings = result.get("review_findings", [])
     
