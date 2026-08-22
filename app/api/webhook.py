@@ -2,7 +2,7 @@
 
 import hmac
 import hashlib
-from typing import Dict, Any
+from typing import Any, Dict
 import json
 import logging
 
@@ -21,6 +21,20 @@ router = APIRouter()
 
 
 def verify_signature(secret: str, body: bytes, signature_header: str | None) -> bool:
+    """Verify a GitHub webhook signature.
+
+    GitHub signs webhook payloads using HMAC-SHA256. This function computes
+    the expected signature using the configured secret and compares it with
+    the signature supplied in the ``X-Hub-Signature-256`` header.
+
+    Args:
+        secret: Secret configured for the GitHub webhook.
+        body: Raw webhook request body.
+        signature_header: Value of the ``X-Hub-Signature-256`` header.
+
+    Returns:
+        True if the signature is valid; otherwise, False.
+    """
     if not signature_header:
         return False
     try:
@@ -40,6 +54,28 @@ async def github_webhook(
     x_hub_signature_256: str | None = Header(None),
     x_github_event: str | None = Header(None),
 ) -> Dict[str, Any]:
+    """Handle incoming GitHub webhook events.
+
+    The endpoint validates the webhook signature, handles GitHub ping events,
+    ignores unsupported event types, and processes pull request events by
+    fetching and parsing the changed files.
+
+    Args:
+        request: Incoming FastAPI request containing the GitHub webhook
+            payload.
+        x_hub_signature_256: GitHub HMAC-SHA256 signature for the request body.
+        x_github_event: GitHub event type provided in the request header.
+
+    Returns:
+        A dictionary containing the webhook processing status. Ping events
+        return a ``pong`` response, unsupported events are marked as ignored,
+        and pull request events return parsed diffs.
+
+    Raises:
+        HTTPException: If the webhook secret is not configured, the signature
+            is invalid, required repository or pull request information is
+            missing, or the GitHub API request fails.
+    """
     body = await request.body()
 
     logger.info(
