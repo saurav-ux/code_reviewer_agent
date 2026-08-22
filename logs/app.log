@@ -1,2 +1,0 @@
-2026-08-09 02:01:16,811 INFO code_review_agent.webhook: Incoming GitHub webhook request — event=ping has_signature=True
-2026-08-09 02:01:16,816 INFO code_review_agent.webhook: GitHub event: ping
