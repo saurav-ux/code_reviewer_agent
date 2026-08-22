@@ -6,6 +6,7 @@ import os
 from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI
+
 from app.api import webhook
 
 # Prepare logs directory
@@ -28,9 +29,11 @@ file_handler.setFormatter(formatter)
 # Configure root logger to use both handlers
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.INFO)
+
 # Remove any existing handlers and attach ours
 for h in list(root_logger.handlers):
     root_logger.removeHandler(h)
+
 root_logger.addHandler(stream_handler)
 root_logger.addHandler(file_handler)
 
@@ -39,10 +42,23 @@ logging.getLogger("code_review_agent.webhook").setLevel(logging.DEBUG)
 
 
 def create_app() -> FastAPI:
+    """Create and configure the FastAPI application.
+
+    The application exposes a health-check endpoint and registers the GitHub
+    webhook router under the ``/github`` prefix.
+
+    Returns:
+        A configured FastAPI application instance.
+    """
     app = FastAPI(title="code-review-agent")
 
     @app.get("/")
-    def health():
+    def health() -> dict[str, str]:
+        """Return the application health status.
+
+        Returns:
+            A dictionary indicating that the application is running.
+        """
         return {"status": "running"}
 
     app.include_router(webhook.router, prefix="/github")
