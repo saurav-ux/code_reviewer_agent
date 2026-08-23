@@ -2,8 +2,11 @@
 
 from typing import Any, Dict, List
 import os
+import logging
 
 import requests
+
+logger = logging.getLogger("code_review_agent.github_client")
 
 
 class GitHubClient:
@@ -135,3 +138,70 @@ class GitHubClient:
                 }
             )
         return result
+
+    # Issue comments helpers
+    def get_issue_comments(self, owner: str, repo: str, issue_number: int) -> List[Dict[str, Any]]:
+        """Retrieve comments for an issue or PR.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            issue_number: Issue or PR number
+
+        Returns:
+            List of comment objects
+        """
+        url = self._url(f"repos/{owner}/{repo}/issues/{issue_number}/comments")
+        resp = self.session.get(url, params={"per_page": 100})
+        resp.raise_for_status()
+        return resp.json()
+
+    def create_issue_comment(self, owner: str, repo: str, issue_number: int, body: str) -> Dict[str, Any]:
+        """Create a comment on an issue or PR."""
+        url = self._url(f"repos/{owner}/{repo}/issues/{issue_number}/comments")
+        resp = self.session.post(url, json={"body": body})
+        if resp.status_code >= 400:
+            # Log response body to aid debugging (do not log entire token)
+            logger.error("GitHub create comment failed: %s %s", resp.status_code, resp.text)
+        resp.raise_for_status()
+        return resp.json()
+
+    def update_issue_comment(self, owner: str, repo: str, comment_id: int, body: str) -> Dict[str, Any]:
+        """Update an existing issue comment by ID."""
+        url = self._url(f"repos/{owner}/{repo}/issues/comments/{comment_id}")
+        resp = self.session.patch(url, json={"body": body})
+        if resp.status_code >= 400:
+            logger.error("GitHub update comment failed: %s %s", resp.status_code, resp.text)
+        resp.raise_for_status()
+        return resp.json()
+
+    # High-level helper that creates or updates a single bot comment per PR
+    BOT_MARKER = "<!-- code-review-agent-comment -->"
+
+    def create_or_update_pr_comment(self, owner: str, repo: str, pr_number: int, body: str) -> Dict[str, Any]:
+        """Create or update a bot comment on a PR. Uses a hidden marker to
+        find existing bot comments and update them instead of creating new
+        ones on every run.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            pr_number: PR number
+            body: Comment body (should include BOT_MARKER)
+
+        Returns:
+            The created or updated comment object
+        """
+        # Ensure marker is present
+        if self.BOT_MARKER not in body:
+            body = f"{self.BOT_MARKER}\n\n{body}"
+
+        comments = self.get_issue_comments(owner, repo, pr_number)
+        for c in comments:
+            cbody = c.get("body") or ""
+            if self.BOT_MARKER in cbody and c.get("user", {}).get("type") in ("Bot", "User"):
+                # Update existing
+                return self.update_issue_comment(owner, repo, c["id"], body)
+
+        # Not found -> create
+        return self.create_issue_comment(owner, repo, pr_number, body)
