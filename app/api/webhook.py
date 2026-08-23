@@ -14,6 +14,9 @@ from starlette.status import HTTP_400_BAD_REQUEST, HTTP_401_UNAUTHORIZED
 from app.core.config import settings
 from app.github.client import GitHubClient
 from app.services.diff_parser import parse_diff
+from app.graph.builder import get_review_graph
+from app.graph.state import ReviewState
+from app.schemas.review import ReviewResponse, ReviewFinding
 
 logger = logging.getLogger("code_review_agent.webhook")
 
@@ -192,4 +195,72 @@ async def github_webhook(
     logger.info("Done. Parsed %d diffs.", len(structured))
     logger.debug("Parsed diffs:\n%s", json.dumps(structured, indent=2))
 
-    return {"status": "ok", "diffs": structured}
+    # Invoke the LangGraph review pipeline
+    logger.info("Invoking code review graph")
+    try:
+        graph = get_review_graph()
+        
+        initial_state: ReviewState = {
+            "owner": owner,
+            "repo": repo,
+            "pr_number": pr_number,
+            "parsed_diffs": structured,
+            "processed_diffs": [],
+            "review_findings": [],
+            "final_summary": "",
+        }
+        
+        result = graph.invoke(initial_state)
+        
+        findings_data = result.get("review_findings", [])
+        summary = result.get("final_summary", "")
+        
+        logger.info(f"Graph execution complete. Findings: {len(findings_data)}, Summary: {summary[:50]}...")
+        
+        # Convert findings to ReviewFinding objects
+        findings = []
+        for finding in findings_data:
+            try:
+                rf = ReviewFinding(
+                    file=finding.get("file", "unknown"),
+                    line=finding.get("line"),
+                    severity=finding.get("severity", "MEDIUM"),
+                    category=finding.get("category", "quality"),
+                    issue=finding.get("issue", ""),
+                    suggestion=finding.get("suggestion", ""),
+                )
+                findings.append(rf)
+            except Exception as e:
+                logger.error(f"Failed to create ReviewFinding: {e}")
+                continue
+        
+        response = ReviewResponse(
+            status="review_completed",
+            pr_number=pr_number,
+            findings=findings,
+            summary=summary,
+        )
+        
+        logger.info(f"Webhook response: {response.status}, {len(findings)} findings")
+
+        # Post findings as a PR comment (create or update a single bot comment)
+        try:
+            from app.utils.markdown import render_findings_markdown
+
+            markdown = render_findings_markdown(response.model_dump())
+            gh.create_or_update_pr_comment(owner, repo, pr_number, markdown)
+            logger.info("Posted code review comment to %s/%s#%s", owner, repo, pr_number)
+        except Exception as exc:
+            logger.error("Failed to post PR comment: %s", exc, exc_info=True)
+
+        return response.model_dump()
+        
+    except Exception as e:
+        logger.error(f"Code review graph execution failed: {e}", exc_info=True)
+        response = ReviewResponse(
+            status="review_failed",
+            pr_number=pr_number,
+            findings=[],
+            summary=f"Code review failed: {str(e)}",
+        )
+        return response.model_dump()
