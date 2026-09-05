@@ -43,27 +43,29 @@ Production notes:
 See `logging.conf.example` for an example configuration you can load with
 `logging.config.dictConfig`.
 
-**Local Tunnel & GitHub Webhook**
+**ngrok & GitHub Webhook**
 
-Follow these steps to expose your local FastAPI app to GitHub using `localtunnel` and register the webhook.
+Follow these steps to expose your local FastAPI app to GitHub using `ngrok` and register the webhook.
 
-- **Install localtunnel (if needed)**:
+- **Install ngrok (if needed)**:
 
 ```bash
-npm install -g localtunnel
+# Install from https://ngrok.com/download
+# Then authenticate once:
+ngrok config add-authtoken <your-ngrok-authtoken>
 ```
 
 - **Start the tunnel (forward port 8000)**:
 
 ```bash
-lt --port 8000
-# Example output: your url is: https://fast-foxes-hear.loca.lt
+ngrok http 8000
+# Example output: Forwarding https://example.ngrok-free.app -> http://localhost:8000
 ```
 
 - **Set the GitHub webhook Payload URL** (exactly):
 
 ```
-https://<your-lt-id>.loca.lt/github/webhook
+https://<your-ngrok-domain>.ngrok-free.app/github/webhook
 ```
 
 - **Webhook settings in GitHub**:
@@ -86,6 +88,13 @@ curl http://127.0.0.1:8000/
 # -> {"status":"running"}
 ```
 
+- Check the public ngrok tunnel:
+
+```bash
+curl https://<your-ngrok-domain>.ngrok-free.app/
+# -> {"status":"running"}
+```
+
 - Quick local POST to the webhook path (no signature header will return `401`):
 
 ```bash
@@ -101,8 +110,8 @@ curl -v -X POST http://127.0.0.1:8000/github/webhook \
 **Troubleshooting**
 
 - If GitHub shows `503 Service Unavailable` for deliveries:
-  - The tunnel URL is not reachable. Restart `lt` and update the Payload URL in GitHub.
-  - Make sure the tunnel command is still running and shows the active URL.
+  - The ngrok URL is not reachable. Restart `ngrok http 8000` and update the Payload URL in GitHub.
+  - Make sure ngrok is still running and shows an active `Forwarding` URL.
 
 - If the app returns `401 Invalid signature` in your terminal or GitHub deliveries:
   - Confirm `GITHUB_WEBHOOK_SECRET` in your `.env` matches the webhook Secret configured in GitHub.
@@ -115,18 +124,47 @@ curl -v -X POST http://127.0.0.1:8000/github/webhook \
 
 **Advanced: send a signed test request from your machine**
 
-Generate `X-Hub-Signature-256` for a payload using Python and send it to the public tunnel URL (replace `SECRET` and `URL`):
+Generate `X-Hub-Signature-256` for a payload using Python and send it to the public ngrok URL:
 
-```bash
-python - <<PY
+```python
 import hmac, hashlib, requests
 secret = b"YOUR_SECRET"
-payload = b'{"action":"opened"}'
+payload = b'{"action":"ping"}'
 sig = hmac.new(secret, payload, hashlib.sha256).hexdigest()
-headers = {"X-Hub-Signature-256": f"sha256={sig}", "Content-Type": "application/json"}
-print(requests.post("https://<your-lt-id>.loca.lt/github/webhook", data=payload, headers=headers).status_code)
-PY
+headers = {
+    "X-Hub-Signature-256": f"sha256={sig}",
+    "X-GitHub-Event": "ping",
+    "Content-Type": "application/json",
+}
+response = requests.post(
+    "https://<your-ngrok-domain>.ngrok-free.app/github/webhook",
+    data=payload,
+    headers=headers,
+)
+print(response.status_code, response.text)
 ```
+
+Expected output:
+
+```text
+200 {"status":"pong"}
+```
+
+## Example Workflow
+
+The screenshots below show the review workflow from webhook processing through the GitHub pull request comment.
+
+### Webhook review logs
+
+![Webhook review logs](docs/screenshots/webhook-review-logs.png)
+
+### Creating a pull request
+
+![Creating a pull request](docs/screenshots/pull-request-create.png)
+
+### Automated review comment
+
+![Automated review comment](docs/screenshots/pull-request-review-comment.png)
 
 ## Running Locally
 
@@ -179,15 +217,15 @@ curl http://127.0.0.1:8000/
 # -> {"status":"running"}
 ```
 
-6. If you want GitHub to send webhook events to your local machine, start `localtunnel` (see the Local Tunnel section) and update the GitHub webhook `Payload URL` to:
+6. If you want GitHub to send webhook events to your local machine, start `ngrok` (see the ngrok section) and update the GitHub webhook `Payload URL` to:
 
 ```
-https://<your-lt-id>.loca.lt/github/webhook
+https://<your-ngrok-domain>.ngrok-free.app/github/webhook
 ```
 
 7. Create a pull request in your repository and watch the terminal where `uvicorn` is running — you should see the webhook logs and diff parsing output.
 
 Troubleshooting notes:
 
-- If GitHub deliveries show `503`, restart the tunnel and update the webhook URL.
+- If GitHub deliveries show `503`, restart ngrok and update the webhook URL.
 - If you receive `401 Invalid signature`, ensure the webhook secret in GitHub matches `GITHUB_WEBHOOK_SECRET` and remove any leading/trailing spaces in `.env`.
