@@ -1,6 +1,6 @@
 """Typed state for the code review graph."""
 
-from typing import TypedDict, List, Any
+from typing import List, TypedDict
 
 
 class ReviewState(TypedDict):
@@ -13,3 +13,4 @@ class ReviewState(TypedDict):
     processed_diffs: List[dict]
     review_findings: List[dict]
     final_summary: str
+    review_error: str | None
