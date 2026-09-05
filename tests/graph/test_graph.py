@@ -110,7 +110,8 @@ def test_graph_finds_security_issues(review_graph):
         "review_findings": [],
         "final_summary": "",
     }
-    sqlInjection9 = 'query = f"SELECT * FROM users WHERE id = {user_id}"'
+    # sqlInjection11 = 'query = f"SELECT * FROM users WHERE id = {user_id}"'
+    sqlInjection11 = 'query = f"SELECT * FROM users WHERE id = {user_id}"'
 
     result = review_graph.invoke(initial_state)
     findings = result.get("review_findings", [])
