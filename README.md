@@ -156,15 +156,18 @@ The screenshots below show the review workflow from webhook processing through t
 
 ### Webhook review logs
 
-![Webhook review logs](docs/screenshots/webhook-review-logs.png)
+<img width="1241" height="360" alt="Screenshot 2026-09-05 175445" src="https://github.com/user-attachments/assets/b35fa656-536a-4e1c-ae3b-99d0aad5d0c8" />
+
 
 ### Creating a pull request
 
-![Creating a pull request](docs/screenshots/pull-request-create.png)
+<img width="1340" height="456" alt="Screenshot 2026-09-05 175332" src="https://github.com/user-attachments/assets/cbfe17a5-bbe7-419d-a821-1270d3252241" />
+
 
 ### Automated review comment
 
-![Automated review comment](docs/screenshots/pull-request-review-comment.png)
+<img width="1331" height="594" alt="Screenshot 2026-09-05 174738" src="https://github.com/user-attachments/assets/74b2d9a7-8f3d-48f1-a6a9-afc4d3416716" />
+
 
 ## Running Locally
 
