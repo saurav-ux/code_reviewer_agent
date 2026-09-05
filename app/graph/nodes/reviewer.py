@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Any
 
 from app.graph.state import ReviewState
-from app.agents.code_reviewer import CodeReviewAgent
+from app.agents.code_reviewer import CodeReviewAgent, ReviewResponseError
 
 logger = logging.getLogger("code_review_agent.reviewer_node")
 
@@ -31,9 +31,17 @@ def review_code(state: ReviewState) -> Dict[str, Any]:
         
         return {
             "review_findings": findings,
+            "review_error": None,
         }
-    except Exception as e:
-        logger.error(f"Code review failed: {e}")
+    except ReviewResponseError as exc:
+        logger.error("Code review failed validation: %s", exc)
         return {
             "review_findings": [],
+            "review_error": str(exc),
+        }
+    except Exception as exc:
+        logger.exception("Code review failed: %s", exc)
+        return {
+            "review_findings": [],
+            "review_error": f"Code review failed: {exc}",
         }

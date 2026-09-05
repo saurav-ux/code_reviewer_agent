@@ -12,6 +12,10 @@ from app.prompts.code_review import CODE_REVIEW_PROMPT
 logger = logging.getLogger("code_review_agent.reviewer")
 
 
+class ReviewResponseError(ValueError):
+    """Raised when the LLM response cannot satisfy the review contract."""
+
+
 class CodeReviewAgent:
     """Agent that reviews code diffs using Groq LLM."""
     
@@ -53,21 +57,42 @@ class CodeReviewAgent:
             
             prompt = CODE_REVIEW_PROMPT.format(code_content=content)
             
-            try:
-                response = self.llm.invoke(prompt)
-                response_text = response.content.strip()
-                
-                logger.debug(f"LLM response for {file_name}: {response_text[:200]}")
-                
-                parsed = self._parse_response(response_text, file_name)
-                findings.extend(parsed)
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse LLM response for {file_name}: {e}")
-                continue
-            except Exception as e:
-                logger.error(f"Error reviewing {file_name}: {e}")
-                continue
+            parsed = None
+            for attempt in range(2):
+                try:
+                    retry_note = ""
+                    if attempt:
+                        retry_note = (
+                            "\nYour previous response was invalid or truncated. "
+                            "Return compact, complete JSON only."
+                        )
+                    response = self.llm.invoke(prompt + retry_note)
+                    response_text = response.content.strip()
+
+                    logger.debug(
+                        "LLM response for %s (attempt %d): %s",
+                        file_name,
+                        attempt + 1,
+                        response_text[:200],
+                    )
+                    parsed = self._parse_response(response_text, file_name)
+                    break
+                except (json.JSONDecodeError, ReviewResponseError) as exc:
+                    logger.warning(
+                        "Invalid LLM response for %s on attempt %d: %s",
+                        file_name,
+                        attempt + 1,
+                        exc,
+                    )
+                    if attempt == 1:
+                        raise ReviewResponseError(
+                            f"LLM returned invalid JSON for {file_name}"
+                        ) from exc
+                except Exception:
+                    logger.exception("Error reviewing %s", file_name)
+                    raise
+
+            findings.extend(parsed or [])
         
         logger.info(f"Review complete. Found {len(findings)} issues")
         return findings
@@ -82,22 +107,21 @@ class CodeReviewAgent:
         Returns:
             List of validated finding dictionaries
         """
-        try:
-            data = json.loads(response_text)
-            findings = data.get("findings", [])
-            
-            validated = []
-            for finding in findings:
-                if self._validate_finding(finding):
-                    # Always set the file to the source file being reviewed so the
-                    # reported location comes from the actual diff, not the LLM.
-                    finding["file"] = file_name
-                    validated.append(finding)
-            
-            return validated
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in response: {e}")
-            return []
+        data = json.loads(response_text)
+        if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
+            raise ReviewResponseError("Response must contain a findings array")
+
+        findings = data["findings"]
+        validated = []
+        for finding in findings:
+            if not isinstance(finding, dict) or not self._validate_finding(finding):
+                raise ReviewResponseError("Response contains an invalid finding")
+            # Always set the file to the source file being reviewed so the
+            # reported location comes from the actual diff, not the LLM.
+            finding["file"] = file_name
+            validated.append(finding)
+
+        return validated
     
     def _validate_finding(self, finding: Dict[str, Any]) -> bool:
         """Validate that a finding has required fields.

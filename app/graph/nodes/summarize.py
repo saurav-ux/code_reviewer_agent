@@ -22,7 +22,13 @@ def summarize_findings(state: ReviewState) -> Dict[str, Any]:
         Updated state with final_summary
     """
     findings = state.get("review_findings", [])
+    review_error = state.get("review_error")
     logger.info(f"Summarizing {len(findings)} findings")
+
+    if review_error:
+        summary = f"Code review failed: {review_error}"
+        logger.error(summary)
+        return {"final_summary": summary}
 
     if not findings:
         summary = "No issues found. Code review passed."

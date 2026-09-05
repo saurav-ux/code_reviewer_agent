@@ -208,12 +208,24 @@ async def github_webhook(
             "processed_diffs": [],
             "review_findings": [],
             "final_summary": "",
+            "review_error": None,
         }
         
         result = graph.invoke(initial_state)
         
         findings_data = result.get("review_findings", [])
         summary = result.get("final_summary", "")
+        review_error = result.get("review_error")
+
+        if review_error:
+            logger.error("Review failed: %s", review_error)
+            response = ReviewResponse(
+                status="review_failed",
+                pr_number=pr_number,
+                findings=[],
+                summary=summary,
+            )
+            return response.model_dump()
         
         logger.info(f"Graph execution complete. Findings: {len(findings_data)}, Summary: {summary[:50]}...")
         
