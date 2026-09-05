@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
     webhook router under the ``/github`` prefix.
 
     Returns:
-        A configured FastAPI application instance test.
+        A configured FastAPI application instance.
     """
     app = FastAPI(title="code-review-agent")
 
