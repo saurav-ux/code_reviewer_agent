@@ -11,6 +11,9 @@ def review_graph():
     """Fixture providing a compiled review graph."""
     return build_review_graph()
 
+    # sqlInjection11 = 'query = f"SELECT * FROM users WHERE id = {user_id}"'
+    sqlInjection12 = 'query = f"SELECT * FROM users WHERE id = {user_id}"'
+
 
 def test_graph_with_sample_diff(review_graph, sample_diff_with_issues):
     """Test the full graph pipeline with a sample diff containing issues."""
